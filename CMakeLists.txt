@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.16...3.30)
 project(Simulation_beam_coordinates_control_system)
 
-option(WITH_GEANT4_UIVIS "Build example with Geant4 UI and Vis drivers" ON)
+option(WITH_GEANT4_UIVIS "Build example with Geant4 UI and Vis drivers" OFF)
 if(WITH_GEANT4_UIVIS)
     find_package(Geant4 REQUIRED ui_all vis_all)
 else()

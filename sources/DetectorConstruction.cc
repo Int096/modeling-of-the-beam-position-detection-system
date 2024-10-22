@@ -1,11 +1,11 @@
 #include "../include/DetectorConstruction.hh"
 
-DetectorConstruction::DetectorConstruction()
+DetectorConstruction::DetectorConstruction(G4double centerCoordinate, G4double distanceSticks, G4double stickRadius)
+    : centerCoordinate(centerCoordinate)
+    , distanceSticks(distanceSticks)
+    , stickRadius(stickRadius)
 {
-    centerCoordinate = 0.*cm;
-    distanceSticks   = 6.*cm;
-    stickRadius      = 3.*mm;
-
+    // TODO вынести в класс
     DefineCommands();
 }
 
@@ -16,20 +16,32 @@ DetectorConstruction::~DetectorConstruction()
 
 G4VPhysicalVolume *DetectorConstruction::Construct()
 {
+    // Определяем материалы
     DefineMaterials();
+
+    // Определяем геометрию, возвращаем мир
     return DefineVolume();
 }
 
-void DetectorConstruction::ConstructSDandField(){};
+void DetectorConstruction::ConstructSDandField()
+{
+    G4SDManager *SDman = G4SDManager::GetSDMpointer();
+    G4VSensitiveDetector *SD = new PhotomultiplierSD("SiPM");
+    
+    SetSensitiveDetector("logicDetector", SD, true);
+    
+    SDman->AddNewDetector(SD);
+};
 
 G4VPhysicalVolume *DetectorConstruction::DefineVolume()
 {
     //-------------------------------------------------------------//
     //                      Описание мира
     //-------------------------------------------------------------//
-    constexpr G4double worldHX = .3*m,
-                       worldHY = .3*m,
-                       worldHZ = 1.*m;
+    constexpr G4double worldHX =  .3*m,
+                       worldHY =  .3*m,
+                       worldHZ = 1.2*m;
+
     auto solidWorld = new G4Box("solidWorld", worldHX, worldHY, worldHZ);
     logicWorld = new G4LogicalVolume(solidWorld, vacuum, "logicWorld");
     auto physWorld  = new G4PVPlacement(nullptr,
@@ -46,10 +58,13 @@ G4VPhysicalVolume *DetectorConstruction::DefineVolume()
     //-------------------------------------------------------------//
     constexpr G4double plateHX = worldHX,
                        plateHY = worldHY,
-                       plateHZ = 2.*cm;
+                       plateHZ = .8*cm;
 
-    auto solidPlate = new G4Box("solidPlate", plateHX, plateHY,plateHZ);
-    logicPlate = new G4LogicalVolume(solidPlate, steel, "logicPlate");
+    auto solidPlate
+        = new G4Box("solidPlate", plateHX, plateHY,plateHZ);
+    logicPlate 
+        = new G4LogicalVolume(solidPlate, steel, "logicPlate");
+    
     new G4PVPlacement(nullptr,
                       G4ThreeVector(),
                       logicPlate,
@@ -66,11 +81,16 @@ G4VPhysicalVolume *DetectorConstruction::DefineVolume()
                        targetHX = 14.*mm,
                        targetHY = 24.*mm,
                        targetThickness = 5.*mm * 2;
+
+    G4double targetPositionZ = -0.5*m;
+
+    auto solidTarget 
+        = new G4EllipticalTube("solidTarget", targetHX, targetHY, targetHZ);
+    logicTarget 
+        = new G4LogicalVolume(solidTarget, deuterium, "logicTarget");
     
-    auto solidTarget = new G4EllipticalTube("solidTarget", targetHX, targetHY, targetHZ);
-    logicTarget = new G4LogicalVolume(solidTarget, deuterium, "logicTarget");
     new G4PVPlacement(nullptr,
-                      G4ThreeVector(0., 0., -0.5*m),
+                      G4ThreeVector(0., 0., targetPositionZ),
                       logicTarget,
                       "Target",
                       logicWorld,
@@ -81,96 +101,79 @@ G4VPhysicalVolume *DetectorConstruction::DefineVolume()
     //-------------------------------------------------------------//
     //                  Описание Палочек и детекторов 
     //-------------------------------------------------------------//
-    constexpr G4double stickHZ = 5.*cm,
-                       stickR  = 5.*cm,
+    constexpr G4double stickHZ    = 5. *cm,
                        detectorHZ = 2.5*mm;
 
     auto rotate = new G4RotationMatrix();
     rotate->rotateX(90*deg);
 
-    auto solidStickAndDetector = new G4Tubs("solidStickAndDetector",
-                                              0,
-                                              stickR,
-                                              stickHZ + 2*detectorHZ,
-                                              0,
-                                              CLHEP::pi);
-    auto solidDetector = new G4Tubs("solidDetector", 0, stickR, detectorHZ, 0, 2*CLHEP::pi);
-    auto solidStick = new G4Tubs("solidStick", 0, stickR, stickHZ, 0, 2*CLHEP::pi);
+    auto solidDetector 
+        = new G4Tubs("solidDetector", 0, stickRadius, detectorHZ, 0, 2*CLHEP::pi);
+    auto solidStick    
+        = new G4Tubs("solidStick", 0, stickRadius, stickHZ, 0, 2*CLHEP::pi);
         
-    logicStickAndDetector = new G4LogicalVolume(solidStickAndDetector, 
-                                                     vacuum, "logicStickAndDetector");
-    logicDetector = new G4LogicalVolume(solidDetector, steel, "logicDetector");
-    logicStick = new G4LogicalVolume(solidStick, scintillatorMat, "logicStick");
-   
-    // Right Stick and Detector
-    new G4PVPlacement(nullptr,
-                      G4ThreeVector(),
+    logicDetector 
+        = new G4LogicalVolume(solidDetector, detectorMat, "logicDetector");
+    logicStick    
+        = new G4LogicalVolume(solidStick, scintillatorMat, "logicStick");
+
+    G4double positionZ  = 0.5*m,
+             positionLX = centerCoordinate + distanceSticks,
+             positionRX = centerCoordinate - distanceSticks,
+             positionTY = stickHZ + detectorHZ,
+             positionBY = - stickHZ - detectorHZ;
+
+    // Sticks
+    new G4PVPlacement(rotate,
+                      G4ThreeVector(positionLX, 0., positionZ),
                       logicStick,
-                      "StickRight",
-                      logicStickAndDetector,
-                      false,
-                      0, 
-                      fCheckOverlaps);
-    new G4PVPlacement(nullptr,
-                      G4ThreeVector(0., 0., stickHZ+detectorHZ),
-                      logicDetector,
-                      "DetectorTopRight",
-                      logicStickAndDetector,
-                      false,
-                      0,
-                      fCheckOverlaps);
-    new G4PVPlacement(nullptr,
-                      G4ThreeVector(0., 0., -stickHZ-detectorHZ),
-                      logicDetector,
-                      "DetectorBottomRight",
-                      logicStickAndDetector,
+                      "LeftStick",
+                      logicWorld,
                       false,
                       0,
                       fCheckOverlaps);
     new G4PVPlacement(rotate,
-                      G4ThreeVector(centerCoordinate - distanceSticks, 0., 0.5*m),
-                      logicStickAndDetector,
-                      "StickAndDetectorRight",
+                      G4ThreeVector(positionRX, 0., positionZ),
+                      logicStick,
+                      "RightStick",
                       logicWorld,
                       false,
                       0,
                       fCheckOverlaps);
 
-    // Left Detector and Stick
-    new G4PVPlacement(nullptr,
-                      G4ThreeVector(),
-                      logicStick,
-                      "StickLeft",
-                      logicStickAndDetector,
-                      false,
-                      0, 
-                      fCheckOverlaps);
-    new G4PVPlacement(nullptr,
-                      G4ThreeVector(0., 0., stickHZ+detectorHZ),
-                      logicDetector,
-                      "DetectorTopLeft",
-                      logicStickAndDetector,
-                      false,
-                      0,
-                      fCheckOverlaps);
-    new G4PVPlacement(nullptr,
-                      G4ThreeVector(0., 0., -stickHZ-detectorHZ),
-                      logicDetector,
-                      "DetectorBottomLeft",
-                      logicStickAndDetector,
-                      false,
-                      0,
-                      fCheckOverlaps);
+    // Detectors
     new G4PVPlacement(rotate,
-                      G4ThreeVector(centerCoordinate + distanceSticks, 0., 0.5*m),
-                      logicStickAndDetector,
-                      "StickAndDetectorLeft",
+                      G4ThreeVector(positionLX, positionTY, positionZ),
+                      logicDetector,
+                      "LeftTopDetector",
                       logicWorld,
                       false,
                       0,
                       fCheckOverlaps);
-
-
+    new G4PVPlacement(rotate,
+                      G4ThreeVector(positionRX, positionTY, positionZ),
+                      logicDetector,
+                      "RightTopDetector",
+                      logicWorld,
+                      false,
+                      0,
+                      fCheckOverlaps);
+    new G4PVPlacement(rotate,
+                      G4ThreeVector(positionLX, positionBY, positionZ),
+                      logicDetector,
+                      "LeftBottomDetector",
+                      logicWorld,
+                      false,
+                      0,
+                      fCheckOverlaps);
+    new G4PVPlacement(rotate,
+                      G4ThreeVector(positionRX, positionBY, positionZ),
+                      logicDetector,
+                      "RightBottomDetector",
+                      logicWorld,
+                      false,
+                      0,
+                      fCheckOverlaps);
 
     DefineVisAttributes();
     return physWorld;
@@ -183,7 +186,6 @@ void DetectorConstruction::DefineMaterials()
     vacuum = nist->FindOrBuildMaterial("G4_AIR");
 
     steel = new G4Material("Steel", 7.999 * g/cm3, 5);
-    
     steel->AddElement(nist->FindOrBuildElement("Mn"), 0.02);
     steel->AddElement(nist->FindOrBuildElement("Si"), 0.01);
     steel->AddElement(nist->FindOrBuildElement("Cr"), 0.19);
@@ -194,12 +196,39 @@ void DetectorConstruction::DefineMaterials()
     auto elD = new G4Element("Deuterium", "elD", 1);
     elD->AddIsotope(D, 1);
 
+    detectorMat = nist->FindOrBuildMaterial("G4_F");
+
     deuterium = new G4Material("matD", 0.00018 * g/cm3, 1);
     deuterium->AddElement(elD, 1);
    
     scintillatorMat = nist->FindOrBuildMaterial("G4_PLASTIC_SC_VINYLTOLUENE");
-    G4cout << G4endl << "The material defined are : " << G4endl << G4endl;
-    G4cout << *(G4Material::GetMaterialTable()) << G4endl;
+
+    // Optical properties
+    const G4int nEntries = 2; 
+    G4double PhotonEnergy[nEntries] = {1.0*eV, 7.0*eV};
+
+    G4double scintillatorRefractionIndex[nEntries] = {1.9, 1.9};
+    G4double scintillatorAbsorptionLength[nEntries] = {50.*m, 50.*m};
+
+    auto scintMPT = new G4MaterialPropertiesTable();
+    auto detMPT   = new G4MaterialPropertiesTable();
+
+    scintMPT->AddProperty("RINDEX", PhotonEnergy, scintillatorRefractionIndex, nEntries);
+    scintMPT->AddProperty("ABSLENGTH", PhotonEnergy, scintillatorAbsorptionLength, nEntries);
+    detMPT->AddProperty("RINDEX", PhotonEnergy, scintillatorRefractionIndex, nEntries);
+    detMPT->AddProperty("ABSLENGTH", PhotonEnergy, scintillatorAbsorptionLength, nEntries);
+
+    G4double scintEnergy[nEntries] = {3.26*eV, 3.44*eV};
+    G4double scintFast[nEntries]   = {1.0, 1.0};
+
+    scintMPT->AddConstProperty("SCINTILLATIONYIELD", 63./keV);
+    scintMPT->AddConstProperty("RESOLUTIONSCALE", 1.);
+
+    detMPT->AddConstProperty("SCINTILLATIONYIELD", 63./keV);
+    detMPT->AddConstProperty("RESOLUTIONSCALE", 1.);
+    
+    scintillatorMat->SetMaterialPropertiesTable(scintMPT);
+    detectorMat->SetMaterialPropertiesTable(detMPT);
 }
 
 void DetectorConstruction::DefineVisAttributes()
@@ -216,7 +245,6 @@ void DetectorConstruction::DefineVisAttributes()
     logicStick->SetVisAttributes(green);
     logicTarget->SetVisAttributes(blue);
     logicDetector->SetVisAttributes(red);
-    logicStickAndDetector->SetVisAttributes(invisible);
 }
 
 void DetectorConstruction::DefineCommands()

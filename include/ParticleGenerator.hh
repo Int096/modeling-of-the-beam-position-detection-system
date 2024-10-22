@@ -20,7 +20,8 @@ class ParticleGenerator : public G4VUserPrimaryGeneratorAction
 
     private:
         G4ParticleGun *fParticleGun = nullptr;
-    
+
+        void ParticleMomentumGenerator();
         void ParticlePositionGenerator();
         void ParticleEnergyGenerator();
 };

@@ -1,5 +1,7 @@
 #include "../include/ParticleGenerator.hh"
+
 #include "CLHEP/Units/SystemOfUnits.h"
+#include "G4ThreeVector.hh"
 #include "G4Types.hh"
 #include <cmath>
 
@@ -12,8 +14,6 @@ ParticleGenerator::ParticleGenerator()
 
     auto particleDefinition = G4ParticleTable::GetParticleTable()->FindParticle(nameOfParticles);
     fParticleGun->SetParticleDefinition(particleDefinition);
-    fParticleGun->SetParticleMomentumDirection(G4ThreeVector(0., 0., 1.));
-    fParticleGun->SetParticleEnergy(800.*MeV);
 }
 
 ParticleGenerator::~ParticleGenerator()
@@ -24,6 +24,7 @@ ParticleGenerator::~ParticleGenerator()
 void ParticleGenerator::GeneratePrimaries(G4Event *anEvent)
 {
     ParticlePositionGenerator();
+    ParticleMomentumGenerator();
     fParticleGun->GeneratePrimaryVertex(anEvent);
 }
 
@@ -46,11 +47,6 @@ void ParticleGenerator::ParticlePositionGenerator()
     if ( TargetSolid )
         targetSize.set(TargetSolid->GetDx(), TargetSolid->GetDy(), TargetSolid->GetDz());
 
-    //TODO 
-        // Написать обработку ошибок
-    //Генерация продольного распределения точки генерации первичной вершини
-    //по треугольному распределению методом браковки Неймана
-    //
     G4double a = targetPosition.z() - targetSize.z(),
              b = targetPosition.z() + targetSize.z(),
              p = 1;
@@ -81,3 +77,17 @@ void ParticleGenerator::ParticlePositionGenerator()
     fParticleGun->SetParticlePosition(startParticlePosition);
 }
 
+void ParticleGenerator::ParticleMomentumGenerator()
+{
+    G4double phi, theta, p;
+    
+    p = 800 * G4UniformRand() * MeV;
+    phi = 2* CLHEP::pi * G4UniformRand();
+    theta = 1./8 * CLHEP::pi * G4UniformRand();
+
+    G4ThreeVector momentum;
+    momentum.setRThetaPhi(1, theta, phi);
+ 
+    fParticleGun->SetParticleMomentumDirection(momentum);
+    fParticleGun->SetParticleEnergy(p);
+}

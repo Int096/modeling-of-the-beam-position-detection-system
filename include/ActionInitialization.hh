@@ -3,6 +3,9 @@
 
 #include <G4VUserActionInitialization.hh>
 
+#include "TrackingAction.hh"
+#include "RunAction.hh"
+#include "SteppingAction.hh"
 #include "ParticleGenerator.hh"
 
 class ActionInitialization : public G4VUserActionInitialization 
